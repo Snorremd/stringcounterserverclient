@@ -45,18 +45,23 @@ class StringCounterClient(asynchat.async_chat):
         receivedMessage = ''.join(self.receivedData)
         if receivedMessage.startswith("ERROR!"):
             self.logger.debug(receivedMessage)
+            self.close()
         else:
             stringLength = len(receivedMessage)
             self.logger.debug("Received string " + receivedMessage + " of length " + str(stringLength))
-            sleep(5)
             self.logger.debug("Attempt to push data to server")
             self.push(str(stringLength) + self.get_terminator())
+            self.close_when_done()
         self.logger.debug("Disconnected from server")
-        self.close_when_done()
+        
 
 if __name__ == '__main__':
     while True:
         address = ('localhost', 9876)
-        client = StringCounterClient(address, "StringCounter", "</xml>")
-        asyncore.loop()
-        sleep(2)
+        try:
+            client = StringCounterClient(address, "StringCounter", "</xml>")
+            asyncore.loop()
+            sleep(1)
+        except socket.error:
+            ## Server probably busy, sleep a bit longer to avoid too much traffic
+            sleep(20)

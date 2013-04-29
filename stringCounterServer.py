@@ -8,6 +8,9 @@ import socket
 import asynchat
 import asyncore
 
+import string
+import random
+
 from collections import deque
 from configLogger import getLoggerForStdOut
 from datetime import datetime
@@ -18,7 +21,7 @@ class StringCounterServer(asyncore.dispatcher):
     '''Receive connections and establish handlers for each client
     '''
 
-    def __init__(self, address, timeoutSeconds):
+    def __init__(self, address, timeoutSeconds, tasks):
         '''Initialize StringCounterServer
         '''
         asyncore.dispatcher.__init__(self)
@@ -28,7 +31,7 @@ class StringCounterServer(asyncore.dispatcher):
         ## Make three collections, one with tasks,
         ## one with current jobs,
         ## and one with the results
-        self.tasksDeque = deque(["This is my hearth", "You are cool", "Abcd", "lkajsdlkajds", "lk<jsdkljl<kjsdlakds", "kljlkajlkjdsakjald"])
+        self.tasksDeque = deque(tasks)
         self.jobDict = {}
         self.resultDict = {}
         self.logger = getLoggerForStdOut("StringCounterServer")
@@ -61,18 +64,12 @@ class StringCounterServer(asyncore.dispatcher):
             task = None
             ClientHandler(clientInfo[0], self.programId, task,
                           None, None)
-
-        self.logger.debug(str(self.tasksDeque) + str(self.jobDict))
-        if len(self.tasksDeque) == 0 and len(self.jobDict) == 0:
-            self.logger.debug("Currently no tasks to perform")
-            self.logger.debug("Results: " + str(self.resultDict))
         return
 
     def handle_close(self):
         '''Close server socket
         '''
         self.logger.debug("Server closing server socket")
-        self.logger.debug("Final results: " + str(self.resultDict))
         self.close()
 
     def check_jobs(self):
@@ -84,7 +81,6 @@ class StringCounterServer(asyncore.dispatcher):
         '''
         currentTime = datetime.now()
         for timestamp in self.jobDict.keys():  # Copy of keys list
-            print timestamp
             difference = currentTime - timestamp
             if difference.seconds > self.timeoutSeconds:
                 self.logger.debug("Task was removed from job dict back to task list")
@@ -110,20 +106,18 @@ class ClientHandler(asynchat.async_chat):
         return
 
     def collect_incoming_data(self, data):
-        self.logger.debug("Read message from client socket and insert into incoming queue")
         self.receivedData.append(data)
 
     def found_terminator(self):
         '''Found the terminator in the input from the client
         '''
-        self.logger.debug("Reached end of input (found terminator), process")
         self.process_data()
 
     def process_command(self):
         '''Received all command input from client. Send back data
         '''
         command = ''.join(self.receivedData)  # Complete data from client
-        self.logger.debug('Process command: %s', command)
+        ## self.logger.debug('Process command: %s', command)
         try:
             programId = command
             if programId == self.programId:
@@ -140,8 +134,8 @@ class ClientHandler(asynchat.async_chat):
                 self.push("Connection not authorized" + linesep)
                 self.close_when_done()  # Not a string counter script
         except ValueError:
-            self.logger.debug("Caught ValueException. Wrong input: " + command)
-            self.logger.debug("Close connection to client socket")
+            ## self.logger.debug("Caught ValueException. Wrong input: " + command)
+            ## self.logger.debug("Close connection to client socket")
             self.push("Could not read command...", linesep)
             self.close_when_done()
 
@@ -152,9 +146,9 @@ class ClientHandler(asynchat.async_chat):
         try:
             count = int(stringCount)
             self.resultDict[self.task[0]] = count
-            self.logger.debug("Client calculated string length")
-            self.logger.debug("Inserted string length into dict: ")
-            self.logger.debug("Dict now looks like:\n" + str(self.resultDict))
+            del self.jobDict[self.task[1]]  #  Remove task from job dict
+            ## self.logger.debug("Client calculated string length")
+            ## self.logger.debug("Inserted string length into dict: ")
         except ValueError:
             self.stringsToProcess.append(self.stringToProcess)
             self.logger.debug("Client returned something other than an integer. Restore string to server")
@@ -162,9 +156,22 @@ class ClientHandler(asynchat.async_chat):
         self.close_when_done()
 
 
+def create_random_strings():
+    strings = []
+    for _ in xrange(1000):
+        strings.append(id_generator(random.randint(5, 40)))
+    return strings
+
+
+def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in xrange(size))      
+
+
 if __name__ == '__main__':
     mainLogger = getLoggerForStdOut('Main')
-    strCountServer = StringCounterServer(("localhost", 9876), 100)
+    tasks = create_random_strings()
+    mainLogger.debug("Create " + str(len(tasks)) + " number of strings")
+    strCountServer = StringCounterServer(("localhost", 9876), 100, tasks)
     mainLogger.debug("Created server to listen on %s:%s" % strCountServer.address)
     mainLogger.debug("Start asyncore loop")
     asyncore.loop()
