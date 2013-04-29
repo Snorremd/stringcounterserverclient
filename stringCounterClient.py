@@ -4,6 +4,59 @@ Created on Apr 12, 2013
 @author: snorre
 '''
 
+import asynchat
+import socket
+import configLogger
+from time import sleep
+import asyncore
+
+
+class StringCounterClient(asynchat.async_chat):
+    '''Counts the length of strings received from server
+    '''
+    def __init__(self, address, programId, terminator):
+        '''Constructor of StringCounterClient class
+        '''
+        self.programId = programId
+        self.set_terminator(terminator)
+        self.receivedData = []
+        self.logger = configLogger.getLoggerForStdOut("StringCounterClient")
+        asynchat.async_chat.__init__(self)
+        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)  # IPv4, TCP
+        self.logger.debug('Connecting to %s, %s' % address)
+        self.connect(address)
+        return
+
+    def handle_connect(self):
+        '''Push command to server to authenticate
+        '''
+        self.logger.debug("Connected to server, push authentication data")
+        self.push(self.programId + self.get_terminator())
+
+    def collect_incoming_data(self, data):
+        self.receivedData.append(data)
+        self.logger.debug("Received data from server: " + data)
+
+    def found_terminator(self):
+        self.logger.debug("Found terminator from server socket")
+        self.process_message()
+
+    def process_message(self):
+        receivedMessage = ''.join(self.receivedData)
+        if receivedMessage.startswith("ERROR!"):
+            self.logger.debug(receivedMessage)
+        else:
+            stringLength = len(receivedMessage)
+            self.logger.debug("Received string " + receivedMessage + " of length " + str(stringLength))
+            sleep(5)
+            self.logger.debug("Attempt to push data to server")
+            self.push(str(stringLength) + self.get_terminator())
+        self.logger.debug("Disconnected from server")
+        self.close_when_done()
 
 if __name__ == '__main__':
-    pass
+    while True:
+        address = ('localhost', 9876)
+        client = StringCounterClient(address, "StringCounter", "</xml>")
+        asyncore.loop()
+        sleep(2)
