@@ -12,7 +12,7 @@ class TaskMessage(Message):
     '''Message containing task to execute
     '''
     def __init__(self, message, taskId, task):
-        Message.__init__(message)
+        Message.__init__(self, message)
         self.taskId = taskId
         self.task = task
 
@@ -22,7 +22,7 @@ class ResultMessage(Message):
     '''Message containing results from client
     '''
     def __init__(self, message, taskId, result):
-        Message.__init__(message)
+        Message.__init__(self, message)
         self.taskId = taskId
         self.result = result
 
@@ -32,7 +32,7 @@ class AuthMessage(Message):
     '''Message containing authentication data
     '''
     def __init__(self, message, authData):
-        Message.__init__(message)
+        Message.__init__(self, message)
         self.authData = authData
 
 
@@ -42,7 +42,7 @@ class AuthErrorMessage(AuthMessage):
     '''
 
     def __init__(self, message, authData, error):
-            AuthMessage.__init(message, authData)
+            AuthMessage.__init__(self, message, authData)
             self.error = error
 
 
@@ -51,7 +51,7 @@ class RequestMessage(Message):
     '''Message containing a task request
     '''
     def __init__(self, message):
-        Message.__init__(message)
+        Message.__init__(self, message)
 
 
 class ErrorMessage(Message):
@@ -59,5 +59,5 @@ class ErrorMessage(Message):
     '''Message containing error message
     '''
     def __init__(self, message, error):
-        Message.__init__(message)
+        Message.__init__(self, message)
         self.error = error

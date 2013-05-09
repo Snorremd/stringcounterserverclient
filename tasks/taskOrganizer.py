@@ -11,9 +11,9 @@ class TaskOrganizer(object):
     def __init__(self, timeoutSeconds, tasks):
         '''Initialize StringCounterServer
         '''
-        self.pendingTasks = deque([])
+        self.pendingTasks = deque(tasks)
         self.activeTasks = {}
-        self.results = []
+        self.results = {}
         self.timeout = timeoutSeconds
 
     def add_tasks(self, tasks):
@@ -28,7 +28,7 @@ class TaskOrganizer(object):
             A task id and first available task object.
             If none available, raise NoTasksError.
         '''
-        task = None
+        print "No of tasks: ", len(self.pendingTasks)
         try:
             task = self.pendingTasks.popleft()
         except IndexError:
@@ -86,5 +86,5 @@ class TaskOrganizer(object):
             taskId (object): the id of the task to finish
             result (Result): the finished result
         '''
-        self.results[result]
+        self.results[self.activeTasks[taskId]] = result
         del self.activeTasks[taskId]

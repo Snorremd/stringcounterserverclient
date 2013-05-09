@@ -10,16 +10,18 @@ import asyncore
 
 import string
 import random
-from pickler import UnpicklingError
+from pickle import PickleError
 
-from configLogger import getLoggerForStdOut
+from easylogging import configLogger
 from datetime import datetime
 
 from tasks.taskOrganizer import TaskOrganizer
 from tasks.errors import NoTasksError
-from messaging.message import AuthMessage, ErrorMessage, \
+from messaging.message import *
+'''AuthMessage, ErrorMessage, \
     TaskMessage, RequestMessage, ResultMessage, AuthErrorMessage
-from messaing.pickling import serialize_message, deserialize_message
+'''
+from messaging.pickling import serialize_message, deserialize_message
 
 
 class StringCounterServer(asyncore.dispatcher):
@@ -32,13 +34,13 @@ class StringCounterServer(asyncore.dispatcher):
         '''
         asyncore.dispatcher.__init__(self)
 
-        self.logger = getLoggerForStdOut("StringCounterServer")
+        self.logger = configLogger.getLoggerForStdOut("StringCounterServer")
 
         self.programId = "StringCounter"
         self.timeoutSeconds = timeoutSeconds
         self.clientSockets = {}
 
-        self.taskOrganizer = TaskOrganizer(tasks)
+        self.taskOrganizer = TaskOrganizer(timeoutSeconds, tasks)
 
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)  # IPv4, TCP
         self.bind(address)
@@ -55,6 +57,11 @@ class StringCounterServer(asyncore.dispatcher):
         self.logger.debug("Client with address %s connected to server socket"
                           % str(clientInfo[1]))
         '''
+        if len(self.taskOrganizer.results) == len(tasks):
+            self.logger.debug("Completed all tasks")
+            for string, length in self.taskOrganizer.results:
+                print string, ": ", length
+            self.close()
         client = ClientHandler(clientInfo[0], self.programId,
                                self, self.taskOrganizer)
         self.clientSockets[client.clientId] = client  # Add with unique id
@@ -64,22 +71,6 @@ class StringCounterServer(asyncore.dispatcher):
         '''
         self.logger.debug("Server closing server socket")
         self.close()
-
-    def check_jobs(self):
-        '''Checks all ongoing jobs for timeouts
-
-        If a task is timed out, it is appended to the
-        task list for later consumption, and deleted from
-        the job dictionary
-        '''
-        currentTime = datetime.now()
-        for timestamp in self.jobDict.keys():  # Copy of keys list
-            difference = currentTime - timestamp
-            if difference.seconds > self.timeoutSeconds:
-                self.logger.debug("Task was removed from job dict" +
-                                  "back to task list")
-                self.tasksDeque.append(self.jobDict[timestamp])
-                del self.jobDict[timestamp]
 
     def remove_client(self, clientId):
         '''Removed the identified client from the list
@@ -93,7 +84,7 @@ class ClientHandler(asynchat.async_chat):
     '''
     # Use default buffer size of 4096 bytes (4kb)
     def __init__(self, sock, programId, serverSocket, taskOrganizer):
-        self.logger = getLoggerForStdOut("ClientHandler")
+        self.logger = configLogger.getLoggerForStdOut("ClientHandler")
         asynchat.async_chat.__init__(self, sock=sock)
 
         self.clientId = datetime.now()
@@ -107,7 +98,7 @@ class ClientHandler(asynchat.async_chat):
 
         self.receivedData = []  # String data from client
 
-        self.set_terminator('\n')  # Break on </xml> or linesep
+        self.set_terminator('</' + programId + '>')  # Break on </xml> or linesep
         return
 
     def collect_incoming_data(self, data):
@@ -125,25 +116,27 @@ class ClientHandler(asynchat.async_chat):
         # self.logger.debug('Process command: %s', command)
         try:
             message = deserialize_message(stringInput)
+        except PickleError:
+            errorMessage = ErrorMessage("Could not deserialize message",
+                                        "Deserialization error")
+            self.send_message(errorMessage)
+        else:
             if isinstance(message, AuthMessage):
                 self.authorize_client(message)
             elif isinstance(message, RequestMessage):
                 self.send_client_task()
             elif isinstance(message, ResultMessage):
                 self.handle_client_result(message)
-        except UnpicklingError:
-            errorMessage = ErrorMessage("Could not deserialize message",
-                                        "Deserialization error")
-            self.send_message(errorMessage)
+        self.receivedData = []
 
     def send_message(self, message):
         '''Sends a message object to a client
         '''
         pickledMessage = serialize_message(message)
-        self.push(pickledMessage + "\n")
+        self.push(pickledMessage + self.get_terminator())
 
     def authorize_client(self, messageObj):
-        if messageObj.authData == self.rogramId:
+        if messageObj.authData == self.programId:
             self.authorized = True
             authMessage = AuthMessage("Authentification suceeded",
                                       "Authentification data was correct")
@@ -170,7 +163,7 @@ class ClientHandler(asynchat.async_chat):
 
     def handle_client_result(self, resultMessage):
         result = resultMessage.result
-        taskId = resultMessage.task
+        taskId = resultMessage.taskId
 
         if self.taskId == taskId and self.taskOrganizer.task_active(taskId):
             self.taskOrganizer.finish_task(taskId, result)
@@ -182,7 +175,7 @@ class ClientHandler(asynchat.async_chat):
 
 def create_random_strings():
     strings = []
-    for _ in xrange(1000):
+    for _ in xrange(100000):
         strings.append(id_generator(random.randint(5, 40)))
     return strings
 
@@ -192,7 +185,7 @@ def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
 
 
 if __name__ == '__main__':
-    mainLogger = getLoggerForStdOut('Main')
+    mainLogger = configLogger.getLoggerForStdOut('Main')
     tasks = create_random_strings()
     mainLogger.debug("Create " + str(len(tasks)) + " number of strings")
     strCountServer = StringCounterServer(("localhost", 9876), 100, tasks)
