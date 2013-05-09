@@ -10,7 +10,7 @@ import asyncore
 
 import string
 import random
-from pickler import UnpicklingError, PicklingError
+from pickler import UnpicklingError
 
 from configLogger import getLoggerForStdOut
 from datetime import datetime
@@ -125,31 +125,22 @@ class ClientHandler(asynchat.async_chat):
         # self.logger.debug('Process command: %s', command)
         try:
             message = deserialize_message(stringInput)
+            if isinstance(message, AuthMessage):
+                self.authorize_client(message)
+            elif isinstance(message, RequestMessage):
+                self.send_client_task()
+            elif isinstance(message, ResultMessage):
+                self.handle_client_result(message)
         except UnpicklingError:
             errorMessage = ErrorMessage("Could not deserialize message",
                                         "Deserialization error")
             self.send_message(errorMessage)
-        else:
-            if isinstance(message, AuthMessage):
-                self.authorize_client(message)
-            elif isinstance(message, RequestMessage) and self.authorized:
-                self.send_client_task()
-            elif isinstance(message, ResultMessage) and self.authorized:
-                self.handle_client_result(message)
-            else:
-                errorMessage = ErrorMessage("You are not authorized",
-                                            "Not authorized error")
-        self.receivedData = []
 
     def send_message(self, message):
         '''Sends a message object to a client
         '''
-        try:
-            pickledMessage = serialize_message(message)
-        except PicklingError:
-            self.logger.debug("Could not serialize message")
-        else:
-            self.push(pickledMessage + self.get_terminator())
+        pickledMessage = serialize_message(message)
+        self.push(pickledMessage + "\n")
 
     def authorize_client(self, messageObj):
         if messageObj.authData == self.rogramId:
