@@ -12,7 +12,7 @@ import string
 import random
 from pickle import PickleError
 
-from easylogging import configLogger
+from easylogging.configLogger import getLoggerForStdOut
 from datetime import datetime
 
 from tasks.taskOrganizer import TaskOrganizer
@@ -34,7 +34,7 @@ class StringCounterServer(asyncore.dispatcher):
         '''
         asyncore.dispatcher.__init__(self)
 
-        self.logger = configLogger.getLoggerForStdOut("StringCounterServer")
+        self.logger = getLoggerForStdOut("StringCounterServer")
 
         self.programId = "StringCounter"
         self.timeoutSeconds = timeoutSeconds
@@ -84,7 +84,7 @@ class ClientHandler(asynchat.async_chat):
     '''
     # Use default buffer size of 4096 bytes (4kb)
     def __init__(self, sock, programId, serverSocket, taskOrganizer):
-        self.logger = configLogger.getLoggerForStdOut("ClientHandler")
+        self.logger = getLoggerForStdOut("ClientHandler")
         asynchat.async_chat.__init__(self, sock=sock)
 
         self.clientId = datetime.now()
@@ -185,7 +185,7 @@ def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
 
 
 if __name__ == '__main__':
-    mainLogger = configLogger.getLoggerForStdOut('Main')
+    mainLogger = getLoggerForStdOut('Main')
     tasks = create_random_strings()
     mainLogger.debug("Create " + str(len(tasks)) + " number of strings")
     strCountServer = StringCounterServer(("localhost", 9876), 100, tasks)

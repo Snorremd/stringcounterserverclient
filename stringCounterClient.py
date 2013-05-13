@@ -7,7 +7,7 @@ Created on Apr 12, 2013
 import asynchat
 import socket
 
-from easylogging import configLogger
+from easylogging.configLogger import getLoggerForStdOut
 from time import sleep
 import asyncore
 
@@ -25,7 +25,7 @@ class StringCounterClient(asynchat.async_chat):
         '''
         asynchat.async_chat.__init__(self)
 
-        self.logger = configLogger.getLoggerForStdOut("StringCounterClient")
+        self.logger = getLoggerForStdOut("StringCounterClient")
 
         self.programId = "StringCounter"
         self.set_terminator('</' + programId + '>')
