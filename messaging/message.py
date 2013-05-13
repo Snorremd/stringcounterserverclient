@@ -11,20 +11,27 @@ class TaskMessage(Message):
 
     '''Message containing task to execute
     '''
-    def __init__(self, message, taskId, task):
+    def __init__(self, message, tasks):
         Message.__init__(self, message)
-        self.taskId = taskId
-        self.task = task
+        self.tasks = tasks
+
+
+class TaskAuthenticationError(Message):
+
+    '''Message containing task auth error
+    '''
+    def __init__(self, message, taskIds):
+        Message.__init__(self, message)
+        self.taskids = taskIds
 
 
 class ResultMessage(Message):
 
     '''Message containing results from client
     '''
-    def __init__(self, message, taskId, result):
+    def __init__(self, message, results):
         Message.__init__(self, message)
-        self.taskId = taskId
-        self.result = result
+        self.results = results
 
 
 class AuthMessage(Message):

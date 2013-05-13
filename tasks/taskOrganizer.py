@@ -32,11 +32,34 @@ class TaskOrganizer(object):
         try:
             task = self.pendingTasks.popleft()
         except IndexError:
-            raise NoTasksError("There are no remaning tasks in" +
+            raise NoTasksError("There are no remaning tasks in" + 
                                " pendingTasks deque")
         else:  # No exceptions raised
             taskId = self.make_task_active(task)
             return taskId, task
+
+    def get_tasks(self, noOfTasks):
+        '''Get n number of tasks from task list
+
+        Args:
+            noOfTasks (int): number of tasks to get
+
+        Returns:
+            a dict containing taskId, task pairs
+        '''
+        tasks = {}
+        for _ in xrange(noOfTasks):
+            try:
+                taskId, task = self.get_task()
+            except NoTasksError:
+                break
+            else:
+                tasks[taskId] = task
+        if not len(tasks) == 0:
+            return tasks
+        else:
+            raise NoTasksError("There are no remaning tasks in" + 
+                               " pendingTasks deque")
 
     def make_task_active(self, task):
         '''Add a task to the active jobs dictionary
@@ -88,3 +111,13 @@ class TaskOrganizer(object):
         '''
         self.results[self.activeTasks[taskId]] = result
         del self.activeTasks[taskId]
+
+    def finish_tasks(self, results):
+        '''Finish the identified tasks with the given results
+
+        Args:
+            results (dict): taskIds (keys) and corresponding results (vals)
+        '''
+        for taskId, result in results.items():
+            if self.task_active(taskId):
+                self.finish_task(taskId, result)

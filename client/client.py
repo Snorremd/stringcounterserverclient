@@ -9,7 +9,6 @@ import socket
 
 from easylogging.configLogger import getLoggerForStdOut
 from time import sleep
-import asyncore
 
 from messaging.message import *
 from messaging.pickling import serialize_message, deserialize_message
@@ -31,7 +30,7 @@ class StringCounterClient(asynchat.async_chat):
         self.set_terminator('</' + programId + '>')
         self.receivedData = []
         self.noOfCompletedTasks = 0
-        
+
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)  # IPv4, TCP
         self.logger.debug('Connecting to %s, %s' % address)
         self.connect(address)
@@ -63,23 +62,23 @@ class StringCounterClient(asynchat.async_chat):
             self.logger.debug("Could not deserialize message")
         else:
             if isinstance(message, TaskMessage):
-                length = self.process_task(message.task)
-                self.send_task_result(length, message.taskId)
+                results = self.process_tasks(message.tasks)
+                self.send_task_results(results)
+                self.noOfCompletedTasks += len(results)
                 self.send_task_request()
-                self.noOfCompletedTasks += 1
                 self.logger.debug(str(self.noOfCompletedTasks) + " number of tasks completed")
             elif isinstance(message, ErrorMessage):
                 sleep(10)
                 self.send_task_request()
             elif isinstance(message, AuthErrorMessage):
                 self.logger.debug("Is instance of AuthErrorMessage")
-                self.logger.debug("Could not authenticate with program id: " +
+                self.logger.debug("Could not authenticate with program id: " + 
                                   self.programId + ". Closing client")
                 self.close_when_done()
             elif isinstance(message, AuthMessage):
                 self.logger.debug("Successfully authenticated")
                 self.send_task_request()
-            
+
         self.receivedData = []
 
     def send_message(self, messageObj):
@@ -99,21 +98,19 @@ class StringCounterClient(asynchat.async_chat):
         message = RequestMessage("Give task")
         self.send_message(message)
 
+    def process_tasks(self, tasks):
+        '''Process n tasks and return results
+        '''
+        results = {}
+        for taskId, task in tasks.items():
+            result = self.process_task(task)
+            results[taskId] = result
+        return results
+
     def process_task(self, task):
         length = len(task)
         return length
 
-    def send_task_result(self, result, taskId):
-        message = ResultMessage("Result", taskId, result)
+    def send_task_results(self, results):
+        message = ResultMessage("Result", results)
         self.send_message(message)
-
-if __name__ == '__main__':
-        address = ('localhost', 9876)
-        try:
-            client = StringCounterClient(address, "StringCounter")
-            asyncore.loop()
-            sleep(1)
-        except socket.error:
-            # Server probably busy
-            sleep(20)
-            

@@ -11,13 +11,14 @@ import asyncore
 import string
 import random
 from pickle import PickleError
+from datetime import datetime
 
 from easylogging.configLogger import getLoggerForStdOut
-from datetime import datetime
 
 from tasks.taskOrganizer import TaskOrganizer
 from tasks.errors import NoTasksError
 from messaging.message import *
+from pickletest import message
 '''AuthMessage, ErrorMessage, \
     TaskMessage, RequestMessage, ResultMessage, AuthErrorMessage
 '''
@@ -29,7 +30,7 @@ class StringCounterServer(asyncore.dispatcher):
     '''Receive connections and establish handlers for each client
     '''
 
-    def __init__(self, address, timeoutSeconds, tasks):
+    def __init__(self, address, timeoutSeconds, tasks, batchSize):
         '''Initialize StringCounterServer
         '''
         asyncore.dispatcher.__init__(self)
@@ -38,6 +39,7 @@ class StringCounterServer(asyncore.dispatcher):
 
         self.programId = "StringCounter"
         self.timeoutSeconds = timeoutSeconds
+        self.batchSize = batchSize
         self.clientSockets = {}
 
         self.taskOrganizer = TaskOrganizer(timeoutSeconds, tasks)
@@ -57,13 +59,8 @@ class StringCounterServer(asyncore.dispatcher):
         self.logger.debug("Client with address %s connected to server socket"
                           % str(clientInfo[1]))
         '''
-        if len(self.taskOrganizer.results) == len(tasks):
-            self.logger.debug("Completed all tasks")
-            for string, length in self.taskOrganizer.results:
-                print string, ": ", length
-            self.close()
-        client = ClientHandler(clientInfo[0], self.programId,
-                               self, self.taskOrganizer)
+
+        client = ClientHandler(clientInfo[0], self)
         self.clientSockets[client.clientId] = client  # Add with unique id
 
     def handle_close(self):
@@ -83,22 +80,23 @@ class ClientHandler(asynchat.async_chat):
     '''Handle communication with single client socket
     '''
     # Use default buffer size of 4096 bytes (4kb)
-    def __init__(self, sock, programId, serverSocket, taskOrganizer):
+    def __init__(self, sock, serverSocket):
         self.logger = getLoggerForStdOut("ClientHandler")
         asynchat.async_chat.__init__(self, sock=sock)
-
-        self.clientId = datetime.now()
-        self.programId = programId
         self.serverSocket = serverSocket
 
-        self.taskOrganizer = taskOrganizer
-        self.taskId = None
+        self.clientId = datetime.now()
+        self.programId = serverSocket.programId
+        self.batchSize = serverSocket.batchSize
+
+        self.taskOrganizer = serverSocket.taskOrganizer
+        self.currentTasks = {}
 
         self.authorized = False
 
         self.receivedData = []  # String data from client
 
-        self.set_terminator('</' + programId + '>')  # Break on </xml> or linesep
+        self.set_terminator('</' + self.programId + '>')  # Break on </xml> or linesep
         return
 
     def collect_incoming_data(self, data):
@@ -124,9 +122,9 @@ class ClientHandler(asynchat.async_chat):
             if isinstance(message, AuthMessage):
                 self.authorize_client(message)
             elif isinstance(message, RequestMessage):
-                self.send_client_task()
+                self.send_client_tasks()
             elif isinstance(message, ResultMessage):
-                self.handle_client_result(message)
+                self.handle_client_results(message)
         self.receivedData = []
 
     def send_message(self, message):
@@ -150,46 +148,36 @@ class ClientHandler(asynchat.async_chat):
             self.serverSocket.remove_client(self.clientId)
             self.close_when_done()
 
-    def send_client_task(self):
+    def send_client_tasks(self):
         try:
-            self.taskId, task = self.taskOrganizer.get_task()
+            tasks = self.taskOrganizer.get_tasks(self.batchSize)
         except NoTasksError:
             errorMessage = ErrorMessage("No tasks",
                                         "No tasks error")
             self.send_message(errorMessage)
         else:
-            taskMessage = TaskMessage("Task:", self.taskId, task)
+            taskMessage = TaskMessage("Task:", tasks)
             self.send_message(taskMessage)
 
-    def handle_client_result(self, resultMessage):
-        result = resultMessage.result
-        taskId = resultMessage.taskId
-
-        if self.taskId == taskId and self.taskOrganizer.task_active(taskId):
-            self.taskOrganizer.finish_task(taskId, result)
+    def handle_client_results(self, resultMessage):
+        results = resultMessage.results
+        if self.check_tasks_authenticity(results.keys()):
+            self.taskOrganizer.finish_tasks(results)
         else:
-            errorMessage = ErrorMessage("Could not validate task result",
-                                        "Invalid result error")
-            self.send_message(errorMessage)
+            message = TaskAuthenticationError("Task authentication error",
+                                              results.keys())
+        self.currentTasks = {}
 
+    def check_tasks_authenticity(self, taskIds):
+        '''Check if results from client match current task ids
 
-def create_random_strings():
-    strings = []
-    for _ in xrange(100000):
-        strings.append(id_generator(random.randint(5, 40)))
-    return strings
+        Args:
+            taskIds (list): a list of keys from client results
 
-
-def id_generator(size=6, chars=string.ascii_uppercase + string.digits):
-    return ''.join(random.choice(chars) for _ in xrange(size))
-
-
-if __name__ == '__main__':
-    mainLogger = getLoggerForStdOut('Main')
-    tasks = create_random_strings()
-    mainLogger.debug("Create " + str(len(tasks)) + " number of strings")
-    strCountServer = StringCounterServer(("localhost", 9876), 100, tasks)
-    mainLogger.debug("Created server to listen on %s:%s" %
-                     strCountServer.address)
-    mainLogger.debug("Start asyncore loop")
-    asyncore.loop()
+        Returns:
+            boolean (true/false) if taskIds match with activeTasks
+        '''
+        if all(taskId in self.currentTasks for taskId in taskIds):
+            return True
+        else:
+            return False
