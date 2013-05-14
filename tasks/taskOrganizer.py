@@ -22,63 +22,62 @@ class TaskOrganizer(object):
         self.pendingTasks.extend(tasks)
 
     def get_task(self):
-        '''Get first remaning task if any
+        '''Get first remaning Task if any
 
         Returns:
-            A task id and first available task object.
+            A Task id and first available Task object.
             If none available, raise NoTasksError.
         '''
-        print "No of tasks: ", len(self.pendingTasks)
         try:
-            task = self.pendingTasks.popleft()
+            Task = self.pendingTasks.popleft()
         except IndexError:
             raise NoTasksError("There are no remaning tasks in" + 
                                " pendingTasks deque")
         else:  # No exceptions raised
-            taskId = self.make_task_active(task)
-            return taskId, task
+            taskId = self.make_task_active(Task)
+            return taskId, Task
 
     def get_tasks(self, noOfTasks):
-        '''Get n number of tasks from task list
+        '''Get n number of tasks from Task list
 
         Args:
             noOfTasks (int): number of tasks to get
 
         Returns:
-            a dict containing taskId, task pairs
+            a dict containing taskId, Task pairs
         '''
         tasks = {}
         for _ in xrange(noOfTasks):
             try:
-                taskId, task = self.get_task()
+                taskId, Task = self.get_task()
             except NoTasksError:
                 break
             else:
-                tasks[taskId] = task
+                tasks[taskId] = Task
         if not len(tasks) == 0:
             return tasks
         else:
             raise NoTasksError("There are no remaning tasks in" + 
                                " pendingTasks deque")
 
-    def make_task_active(self, task):
-        '''Add a task to the active jobs dictionary
+    def make_task_active(self, Task):
+        '''Add a Task to the active jobs dictionary
 
         Args:
-            task (Task): The task to make active
+            Task (Task): The Task to make active
 
         Returns:
-            currentTime (object) of when task was created
+            currentTime (object) of when Task was created
         '''
         currentTime = datetime.now()
-        self.activeTasks[currentTime] = task
+        self.activeTasks[currentTime] = Task
         return currentTime
 
     def check_active_tasks(self):
         '''Check active tasks for timeouts
 
-        For each task in active tasks, check if the
-        task has timed out, and if so reinsert into
+        For each Task in active tasks, check if the
+        Task has timed out, and if so reinsert into
         pendingTasks deque and remove from active tasks dict.
         '''
         currentTime = datetime.now()
@@ -89,13 +88,13 @@ class TaskOrganizer(object):
                 del self.pendingTasks[timestamp]
 
     def task_active(self, taskId):
-        '''Check if a task is still active
+        '''Check if a Task is still active
 
         Args:
-            taskId (object): the id of the task to be checked
+            taskId (object): the id of the Task to be checked
 
         Returns:
-            True if task still active, False if not
+            True if Task still active, False if not
         '''
         if taskId in self.activeTasks:
             return True
@@ -103,10 +102,10 @@ class TaskOrganizer(object):
             return False
 
     def finish_task(self, taskId, result):
-        '''Finish task
+        '''Finish Task
 
         Args:
-            taskId (object): the id of the task to finish
+            taskId (object): the idTaskthe task to finish
             result (Result): the finished result
         '''
         self.results[self.activeTasks[taskId]] = result

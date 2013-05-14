@@ -7,6 +7,25 @@ class Message(object):
         self.message = message
 
 
+class AuthenticationMessage(Message):
+
+    '''Message containing authentication data
+    '''
+    def __init__(self, message, authData):
+        Message.__init__(self, message)
+        self.authData = authData
+
+
+class AuthErrorMessage(AuthenticationMessage):
+
+    ''' Message containing auth error data
+    '''
+
+    def __init__(self, message, authData, error):
+            AuthenticationMessage.__init__(self, message, authData)
+            self.error = error
+
+
 class TaskMessage(Message):
 
     '''Message containing task to execute
@@ -14,6 +33,15 @@ class TaskMessage(Message):
     def __init__(self, message, tasks):
         Message.__init__(self, message)
         self.tasks = tasks
+
+
+class NoTasksMessage(Message):
+
+    '''Message containing no task info
+    '''
+    def __init__(self, message, noTasksInfo):
+        Message.__init__(self, message)
+        self.noTasksInfo = noTasksInfo
 
 
 class TaskAuthenticationError(Message):
@@ -34,25 +62,6 @@ class ResultMessage(Message):
         self.results = results
 
 
-class AuthMessage(Message):
-
-    '''Message containing authentication data
-    '''
-    def __init__(self, message, authData):
-        Message.__init__(self, message)
-        self.authData = authData
-
-
-class AuthErrorMessage(AuthMessage):
-
-    ''' Message containing auth error data
-    '''
-
-    def __init__(self, message, authData, error):
-            AuthMessage.__init__(self, message, authData)
-            self.error = error
-
-
 class RequestMessage(Message):
 
     '''Message containing a task request
@@ -68,3 +77,12 @@ class ErrorMessage(Message):
     def __init__(self, message, error):
         Message.__init__(self, message)
         self.error = error
+
+
+class DisconnectMessage(Message):
+
+    '''Disconnection message for client or server
+    '''
+    def __init__(self, message, disconnectInfo):
+        Message.__init__(self, message)
+        self.disconnectInfo = disconnectInfo

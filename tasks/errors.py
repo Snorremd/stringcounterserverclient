@@ -10,4 +10,14 @@ class NoTasksError(Error):
         msg  -- explanation of the error
     '''
     def __init__(self, msg):
-        self.msg = msg
+        Error.__init__(self, msg)
+
+
+class TaskExecutionError(Error):
+
+    '''Exception raised if task execution errors
+    occurs
+    '''
+    def __init__(self, msg, task):
+        Error.__init__(self, msg)
+        self.task = task

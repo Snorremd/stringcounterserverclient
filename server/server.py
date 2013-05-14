@@ -18,24 +18,24 @@ from easylogging.configLogger import getLoggerForStdOut
 from tasks.taskOrganizer import TaskOrganizer
 from tasks.errors import NoTasksError
 from messaging.message import *
-from pickletest import message
-'''AuthMessage, ErrorMessage, \
+
+'''AuthenticationMessage, ErrorMessage, \
     TaskMessage, RequestMessage, ResultMessage, AuthErrorMessage
 '''
 from messaging.pickling import serialize_message, deserialize_message
 
 
-class StringCounterServer(asyncore.dispatcher):
+class Server(asyncore.dispatcher):
 
     '''Receive connections and establish handlers for each client
     '''
 
     def __init__(self, address, timeoutSeconds, tasks, batchSize):
-        '''Initialize StringCounterServer
+        '''Initialize Server
         '''
         asyncore.dispatcher.__init__(self)
 
-        self.logger = getLoggerForStdOut("StringCounterServer")
+        self.logger = getLoggerForStdOut("Server")
 
         self.programId = "StringCounter"
         self.timeoutSeconds = timeoutSeconds
@@ -60,7 +60,7 @@ class StringCounterServer(asyncore.dispatcher):
                           % str(clientInfo[1]))
         '''
 
-        client = ClientHandler(clientInfo[0], self)
+        client = ClientHandler(clientInfo[0], clientInfo[1], self)
         self.clientSockets[client.clientId] = client  # Add with unique id
 
     def handle_close(self):
@@ -80,12 +80,12 @@ class ClientHandler(asynchat.async_chat):
     '''Handle communication with single client socket
     '''
     # Use default buffer size of 4096 bytes (4kb)
-    def __init__(self, sock, serverSocket):
+    def __init__(self, clientSock, clientAddress, serverSocket):
         self.logger = getLoggerForStdOut("ClientHandler")
-        asynchat.async_chat.__init__(self, sock=sock)
+        asynchat.async_chat.__init__(self, sock=clientSock)
         self.serverSocket = serverSocket
 
-        self.clientId = datetime.now()
+        self.clientId = clientAddress
         self.programId = serverSocket.programId
         self.batchSize = serverSocket.batchSize
 
@@ -119,12 +119,14 @@ class ClientHandler(asynchat.async_chat):
                                         "Deserialization error")
             self.send_message(errorMessage)
         else:
-            if isinstance(message, AuthMessage):
-                self.authorize_client(message)
-            elif isinstance(message, RequestMessage):
+            if isinstance(message, RequestMessage):
                 self.send_client_tasks()
             elif isinstance(message, ResultMessage):
                 self.handle_client_results(message)
+            elif isinstance(message, AuthenticationMessage):
+                self.authorize_client(message)
+            elif isinstance(message, DisconnectMessage):
+                self.disconnect_client(message)
         self.receivedData = []
 
     def send_message(self, message):
@@ -136,7 +138,7 @@ class ClientHandler(asynchat.async_chat):
     def authorize_client(self, messageObj):
         if messageObj.authData == self.programId:
             self.authorized = True
-            authMessage = AuthMessage("Authentification suceeded",
+            authMessage = AuthenticationMessage("Authentification suceeded",
                                       "Authentification data was correct")
             self.send_message(authMessage)
 
@@ -148,12 +150,18 @@ class ClientHandler(asynchat.async_chat):
             self.serverSocket.remove_client(self.clientId)
             self.close_when_done()
 
+    def disconnect_client(self, message):
+        self.serverSocket.remove_client(self.clientId)
+        self.close_when_done()
+        self.logger.debug("Client disconnected (id: " + str(self.clientId) + \
+                          " ), because " + message.disconnectInfo)
+
     def send_client_tasks(self):
         try:
             tasks = self.taskOrganizer.get_tasks(self.batchSize)
         except NoTasksError:
-            errorMessage = ErrorMessage("No tasks",
-                                        "No tasks error")
+            errorMessage = NoTasksMessage("No tasks error",
+                                        "Currently no tasks to execute")
             self.send_message(errorMessage)
         else:
             taskMessage = TaskMessage("Task:", tasks)
@@ -166,7 +174,12 @@ class ClientHandler(asynchat.async_chat):
         else:
             message = TaskAuthenticationError("Task authentication error",
                                               results.keys())
+            self.send_message(message)
         self.currentTasks = {}
+        self.logger.debug("Received and handled " + str(len(results)) + \
+                          " results from client")
+        self.logger.debug(str(len(self.taskOrganizer.pendingTasks)) + \
+                          " tasks remaining")
 
     def check_tasks_authenticity(self, taskIds):
         '''Check if results from client match current task ids

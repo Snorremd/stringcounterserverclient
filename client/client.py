@@ -10,21 +10,24 @@ import socket
 from easylogging.configLogger import getLoggerForStdOut
 from time import sleep
 
+from tasks import taskExecutor
+from tasks.errors import TaskExecutionError
+
 from messaging.message import *
 from messaging.pickling import serialize_message, deserialize_message
 from pickle import PickleError
 
 
-class StringCounterClient(asynchat.async_chat):
+class Client(asynchat.async_chat):
 
     '''Counts the length of strings received from server
     '''
     def __init__(self, address, programId):
-        '''Constructor of StringCounterClient class
+        '''Constructor of Client class
         '''
         asynchat.async_chat.__init__(self)
 
-        self.logger = getLoggerForStdOut("StringCounterClient")
+        self.logger = getLoggerForStdOut("Client")
 
         self.programId = "StringCounter"
         self.set_terminator('</' + programId + '>')
@@ -40,42 +43,46 @@ class StringCounterClient(asynchat.async_chat):
         '''Push command to server to authenticate
         '''
         self.logger.debug("Connected to server, push authentication data")
-        authMessage = AuthMessage("Connecting", self.programId)
+        authMessage = AuthenticationMessage("Connecting", self.programId)
         self.send_message(authMessage)
         return
 
+    def disconnect(self, disconnectInfo):
+        '''Disconnect from server and close connection
+        '''
+        message = DisconnectMessage("Client disconnected",
+                                    disconnectInfo)
+        self.send_message(message)
+        self.close_when_done()
+        self.logger.debug("Disconnected from server")
+
     def collect_incoming_data(self, data):
         self.receivedData.append(data)
-        self.logger.debug("Received data")
 
     def found_terminator(self):
-        self.logger.debug("Found terminator from server socket")
         self.process_message()
 
     def process_message(self):
         receivedString = ''.join(self.receivedData)
-        self.logger.debug("Process message")
-
         try:
             message = deserialize_message(receivedString)
         except PickleError:
             self.logger.debug("Could not deserialize message")
         else:
             if isinstance(message, TaskMessage):
-                results = self.process_tasks(message.tasks)
-                self.send_task_results(results)
-                self.noOfCompletedTasks += len(results)
-                self.send_task_request()
-                self.logger.debug(str(self.noOfCompletedTasks) + " number of tasks completed")
-            elif isinstance(message, ErrorMessage):
+                self.process_tasks(message.tasks)
+            elif isinstance(message, NoTasksMessage):
+                self.logger.debug("Server returned NoTasksError " + \
+                                  "with reason:\n" + message.noTasksInfo)
                 sleep(10)
                 self.send_task_request()
             elif isinstance(message, AuthErrorMessage):
-                self.logger.debug("Is instance of AuthErrorMessage")
+                self.logger.debug("Server returned AuthErrorMessage " + \
+                                  "for tasks:\n" + str(message.taskIds))
                 self.logger.debug("Could not authenticate with program id: " + 
                                   self.programId + ". Closing client")
                 self.close_when_done()
-            elif isinstance(message, AuthMessage):
+            elif isinstance(message, AuthenticationMessage):
                 self.logger.debug("Successfully authenticated")
                 self.send_task_request()
 
@@ -88,29 +95,43 @@ class StringCounterClient(asynchat.async_chat):
             message = serialize_message(messageObj)
         except PickleError:
             self.logger.debug("Could not serialize/pickle message")
-            self.send_task_request()  # Ask for new task
+            self.send_task_request()  # Ask for new Task
         else:
             self.push(message + self.get_terminator())
 
     def send_task_request(self):
-        '''Sends a task request message to server
+        '''Sends a Task request message to server
         '''
-        message = RequestMessage("Give task")
+        message = RequestMessage("Request Task")
         self.send_message(message)
 
     def process_tasks(self, tasks):
-        '''Process n tasks and return results
-        '''
-        results = {}
-        for taskId, task in tasks.items():
-            result = self.process_task(task)
-            results[taskId] = result
-        return results
+        '''Process n tasks and sends a results message to server
 
-    def process_task(self, task):
-        length = len(task)
-        return length
+        Args:
+            tasks (dict): a map of taskIds and task objects
+
+        '''
+        try:
+            results = taskExecutor.execute_tasks(tasks)
+        except TaskExecutionError as error:
+            self.logger.debug("Could not execute task: " + \
+                              str(error.task))
+
+            self.disconnect("Could not execute tasks")
+            self.logger.debug("Client disconnected from the server as " + \
+                              "it could not execute given tasks.")
+        else:
+            self.send_task_results(results)
+            self.noOfCompletedTasks += len(results)
+            self.send_task_request()
+            self.logger.debug(str(self.noOfCompletedTasks) + " number of tasks completed")
 
     def send_task_results(self, results):
+        '''Sends task results to the server
+
+        Args:
+            results (dict): a map of taskIds and results
+        '''
         message = ResultMessage("Result", results)
         self.send_message(message)

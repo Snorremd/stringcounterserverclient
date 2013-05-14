@@ -1,9 +1,9 @@
 from datetime import datetime
 
 
-class task(object):
+class Task(object):
 
-    '''Class modelling one task to execute.
+    '''Class modelling one Task to execute.
     '''
 
     def __init__(self, workItem):
@@ -17,3 +17,19 @@ class task(object):
             return True
         else:
             return False
+
+    def execute(self):
+        return None
+
+
+class StringTask(Task):
+
+    '''A simple class to find lenghts of strings
+    '''
+
+    def __init__(self, workItem):
+        Task.__init__(self, workItem)
+
+    def execute(self):
+        result = len(self.workItem)
+        return result
