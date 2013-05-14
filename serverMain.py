@@ -25,7 +25,7 @@ if __name__ == '__main__':
     mainLogger = getLoggerForStdOut('Main')
     tasks = create_random_strings()
     mainLogger.debug("Create " + str(len(tasks)) + " number of strings")
-    server = Server(("localhost", 9875), 100, tasks, 1000)
+    server = Server(("", 9875), 100, tasks, 1000)
     mainLogger.debug("Created server to listen on %s:%s" % 
                      server.address)
     mainLogger.debug("Start asyncore loop")
