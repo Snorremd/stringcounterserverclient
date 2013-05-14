@@ -14,7 +14,7 @@ import sys
 
 if __name__ == '__main__':
         mainLogger = getLoggerForStdOut("Main")
-        address = ('microbrewit.thunemedia.no', 9876)
+        address = ('microbrewit.thunemedia.no', 9874)
         client = None
         try:
             client = Client(address, "StringCounter", "snorre9002")
