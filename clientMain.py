@@ -17,7 +17,7 @@ if __name__ == '__main__':
         address = ('microbrewit.thunemedia.no', 9874)
         client = None
         try:
-            client = Client(address, "StringCounter", "snorre9002")
+            client = Client(address, "StringCounter", "snorremac!")
             asyncore.loop()
             sleep(1)
         except socket.error:
