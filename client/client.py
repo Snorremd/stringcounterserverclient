@@ -22,7 +22,7 @@ class Client(asynchat.async_chat):
 
     '''Counts the length of strings received from server
     '''
-    def __init__(self, address, programId):
+    def __init__(self, address, programId, username):
         '''Constructor of Client class
         '''
         asynchat.async_chat.__init__(self)
@@ -30,6 +30,7 @@ class Client(asynchat.async_chat):
         self.logger = getLoggerForStdOut("Client")
 
         self.programId = "StringCounter"
+        self.username = username
         self.set_terminator('</' + programId + '>')
         self.receivedData = []
         self.noOfCompletedTasks = 0
@@ -43,7 +44,8 @@ class Client(asynchat.async_chat):
         '''Push command to server to authenticate
         '''
         self.logger.debug("Connected to server, push authentication data")
-        authMessage = AuthenticationMessage("Connecting", self.programId)
+        authMessage = AuthenticationMessage("Connecting", self.programId,
+                                            self.username)
         self.send_message(authMessage)
         return
 
@@ -75,6 +77,10 @@ class Client(asynchat.async_chat):
                 self.logger.debug("Server returned NoTasksError " + \
                                   "with reason:\n" + message.noTasksInfo)
                 sleep(10)
+                self.send_task_request()
+            elif isinstance(message, ScoreMessage):
+                self.logger.debug("Received scores")
+                self.output_scores(message)
                 self.send_task_request()
             elif isinstance(message, AuthErrorMessage):
                 self.logger.debug("Server returned AuthErrorMessage " + \
@@ -125,7 +131,7 @@ class Client(asynchat.async_chat):
             self.send_task_results(results)
             self.noOfCompletedTasks += len(results)
             self.send_task_request()
-            self.logger.debug(str(self.noOfCompletedTasks) + " number of tasks completed")
+        sleep(5)
 
     def send_task_results(self, results):
         '''Sends task results to the server
@@ -135,3 +141,19 @@ class Client(asynchat.async_chat):
         '''
         message = ResultMessage("Result", results)
         self.send_message(message)
+
+    def output_scores(self, scoreMessage):
+        '''Outputs scores to the logger defined in self
+        '''
+        scoreOutput = "\n#####################################\n" + \
+        "Your score: " + str(scoreMessage.userScore) + "\n" + \
+        "-----------\n" + \
+        self.get_scoreboard_string(scoreMessage.topScores)
+        self.logger.debug(scoreOutput)
+
+    def get_scoreboard_string(self, topScores):
+        noOfScores = len(topScores)
+        scoreBoardString = "Top " + str(noOfScores) + " users:\n"
+        for user, score in topScores:
+            scoreBoardString += "{0:15} : {1}\n".format(user, score)
+        return scoreBoardString

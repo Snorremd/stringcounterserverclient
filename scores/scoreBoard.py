@@ -1,4 +1,5 @@
 from errors import NoSuchUserError
+from collections import OrderedDict
 
 
 class ScoreBoard(object):
@@ -11,20 +12,22 @@ class ScoreBoard(object):
     '''
 
     def __init__(self):
-        self.totalScore = 0
-        self.scores = {}
-        self.ranks = 
+        self.noOfExecutedTasks = 0
+        self.scores = OrderedDict({})
 
-    def increment_user_score(self, user):
-        '''Increments a user's score with 1
+    def increase_user_score(self, user, amount):
+        '''Increases a user's score with given amount
 
         Args:
             user (str): the user who's score to increment
+            amount (int): the amount with which to incrase score
         '''
         if user not in self.scores:
-            self.scores[user] = 1
+            self.scores[user] = amount
         else:
-            self.scores[user] += 1
+            self.scores[user] += amount
+
+        self.noOfExecutedTasks += amount
 
     def get_user_score(self, user):
         '''Return score of named user
@@ -42,3 +45,15 @@ class ScoreBoard(object):
             raise NoSuchUserError("User not found", user)
         else:
             return score
+
+    def get_user_ranks(self):
+        '''Get the rank of all users
+
+        Returns:
+            Scores (OrderedDict) with user -> score mappings
+        '''
+        ## Sort the key-value-pairs according to score in descending order
+        sorted(self.scores.items(),
+               key=lambda item:
+                                - item[1])
+        return self.scores

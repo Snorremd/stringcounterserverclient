@@ -11,9 +11,10 @@ class AuthenticationMessage(Message):
 
     '''Message containing authentication data
     '''
-    def __init__(self, message, authData):
+    def __init__(self, message, authData, username):
         Message.__init__(self, message)
         self.authData = authData
+        self.username = username
 
 
 class AuthErrorMessage(AuthenticationMessage):
@@ -78,6 +79,15 @@ class ErrorMessage(Message):
         Message.__init__(self, message)
         self.error = error
 
+
+class ScoreMessage(Message):
+
+    '''Message containing scoreboard info
+    '''
+    def __init__(self, message, userScore, topScores):
+        Message.__init__(self, message)
+        self.userScore = userScore
+        self.topScores = topScores
 
 class DisconnectMessage(Message):
 

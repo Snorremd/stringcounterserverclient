@@ -10,6 +10,8 @@ import asyncore
 
 import string
 import random
+import thread
+from time import sleep
 from pickle import PickleError
 from datetime import datetime
 
@@ -18,6 +20,8 @@ from easylogging.configLogger import getLoggerForStdOut
 from tasks.taskOrganizer import TaskOrganizer
 from tasks.errors import NoTasksError
 from messaging.message import *
+from scores.scoreBoard import ScoreBoard
+import time
 
 '''AuthenticationMessage, ErrorMessage, \
     TaskMessage, RequestMessage, ResultMessage, AuthErrorMessage
@@ -43,12 +47,16 @@ class Server(asyncore.dispatcher):
         self.clientSockets = {}
 
         self.taskOrganizer = TaskOrganizer(timeoutSeconds, tasks)
+        self.scoreBoard = ScoreBoard()
 
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)  # IPv4, TCP
         self.bind(address)
         self.address = self.socket.getsockname()
         self.logger.debug("Created server socket at " + str(self.address))
         self.listen(100)
+
+        thread.start_new_thread(self.send_client_scores, ())
+
         return
 
     def handle_accept(self):
@@ -60,7 +68,7 @@ class Server(asyncore.dispatcher):
                           % str(clientInfo[1]))
         '''
 
-        client = ClientHandler(clientInfo[0], clientInfo[1], self)
+        client = ClientHandler(clientInfo[0], clientInfo[1], self, self.scoreBoard)
         self.clientSockets[client.clientId] = client  # Add with unique id
 
     def handle_close(self):
@@ -74,23 +82,36 @@ class Server(asyncore.dispatcher):
         '''
         del self.clientSockets[clientId]
 
+    def send_client_scores(self):
+        '''Send score results to each client
+        '''
+        while True:
+            sleep(10)
+            self.logger.debug("Send scores to clients")
+            userScores = self.scoreBoard.get_user_ranks()
+            for _, clientSocket in self.clientSockets.items():
+                clientSocket.send_client_scores(userScores)
+
 
 class ClientHandler(asynchat.async_chat):
 
     '''Handle communication with single client socket
     '''
     # Use default buffer size of 4096 bytes (4kb)
-    def __init__(self, clientSock, clientAddress, serverSocket):
+    def __init__(self, clientSock, clientAddress, serverSocket, scoreBoard):
         self.logger = getLoggerForStdOut("ClientHandler")
         asynchat.async_chat.__init__(self, sock=clientSock)
         self.serverSocket = serverSocket
 
         self.clientId = clientAddress
+        self.username = "Unspecified"
         self.programId = serverSocket.programId
         self.batchSize = serverSocket.batchSize
 
         self.taskOrganizer = serverSocket.taskOrganizer
         self.currentTasks = {}
+
+        self.scoreBoard = scoreBoard
 
         self.authorized = False
 
@@ -124,7 +145,7 @@ class ClientHandler(asynchat.async_chat):
             elif isinstance(message, ResultMessage):
                 self.handle_client_results(message)
             elif isinstance(message, AuthenticationMessage):
-                self.authorize_client(message)
+                self.authenticate_client(message)
             elif isinstance(message, DisconnectMessage):
                 self.disconnect_client(message)
         self.receivedData = []
@@ -135,11 +156,13 @@ class ClientHandler(asynchat.async_chat):
         pickledMessage = serialize_message(message)
         self.push(pickledMessage + self.get_terminator())
 
-    def authorize_client(self, messageObj):
+    def authenticate_client(self, messageObj):
         if messageObj.authData == self.programId:
             self.authorized = True
+            self.username = messageObj.username
+            self.scoreBoard.increase_user_score(self.username, 0)
             authMessage = AuthenticationMessage("Authentification suceeded",
-                                      "Authentification data was correct")
+                                      "Authentification data was correct", "")
             self.send_message(authMessage)
 
         else:
@@ -175,11 +198,9 @@ class ClientHandler(asynchat.async_chat):
             message = TaskAuthenticationError("Task authentication error",
                                               results.keys())
             self.send_message(message)
+
         self.currentTasks = {}
-        self.logger.debug("Received and handled " + str(len(results)) + \
-                          " results from client")
-        self.logger.debug(str(len(self.taskOrganizer.pendingTasks)) + \
-                          " tasks remaining")
+        self.scoreBoard.increase_user_score(self.username, len(results))
 
     def check_tasks_authenticity(self, taskIds):
         '''Check if results from client match current task ids
@@ -194,3 +215,33 @@ class ClientHandler(asynchat.async_chat):
             return True
         else:
             return False
+
+    def send_client_scores(self, userScores):
+        '''Send clients score and top 100 scores to client
+        '''
+        self.logger.debug("Send scores to client")
+        start = time.time()
+        userScore = self.scoreBoard.get_user_score(self.username)
+        scores = userScores.items()[:100]
+        scoreMessage = ScoreMessage("Scores", userScore, scores)
+        self.send_message(scoreMessage)
+        stop = time.time()
+
+        self.logger.debug("Time to send score to single client: " + str(stop - start))
+        self.output_scores(scoreMessage)
+
+    def output_scores(self, scoreMessage):
+        '''Outputs scores to the logger defined in self
+        '''
+        scoreOutput = "\n#####################################\n" + \
+        "Your score: " + str(scoreMessage.userScore) + "\n" + \
+        "-----------\n" + \
+        self.get_scoreboard_string(scoreMessage.topScores)
+        self.logger.debug(scoreOutput)
+
+    def get_scoreboard_string(self, topScores):
+        noOfScores = len(topScores)
+        scoreBoardString = "Top " + str(noOfScores) + " users:\n"
+        for user, score in topScores:
+            scoreBoardString += "{0:15} : {1}\n".format(user, score)
+        return scoreBoardString
