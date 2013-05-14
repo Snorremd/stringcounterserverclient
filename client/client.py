@@ -131,7 +131,6 @@ class Client(asynchat.async_chat):
             self.send_task_results(results)
             self.noOfCompletedTasks += len(results)
             self.send_task_request()
-        sleep(5)
 
     def send_task_results(self, results):
         '''Sends task results to the server
