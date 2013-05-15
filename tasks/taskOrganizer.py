@@ -108,7 +108,7 @@ class TaskOrganizer(object):
             taskId (object): the idTaskthe task to finish
             result (Result): the finished result
         '''
-        self.results[self.activeTasks[taskId]] = result
+        self.results[taskId] = result
         del self.activeTasks[taskId]
 
     def finish_tasks(self, results):
@@ -120,3 +120,12 @@ class TaskOrganizer(object):
         for taskId, result in results.items():
             if self.task_active(taskId):
                 self.finish_task(taskId, result)
+
+    def tasks_finished(self, expectedResultsLenght):
+        '''Check if results are finished
+        '''
+        if len(self.results) == expectedResultsLenght:
+            return True
+        else:
+            return False
+

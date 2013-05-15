@@ -29,6 +29,7 @@ class ScoreBoard(object):
 
         self.noOfExecutedTasks += amount
 
+
     def get_user_score(self, user):
         '''Return score of named user
 

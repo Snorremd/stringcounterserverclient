@@ -14,10 +14,10 @@ import sys
 
 if __name__ == '__main__':
         mainLogger = getLoggerForStdOut("Main")
-        address = ('microbrewit.thunemedia.no', 9874)
+        address = ('localhost', 9874)
         client = None
         try:
-            client = Client(address, "StringCounter", "snorremac!")
+            client = Client(address, "StringCounter", "snorremac9001")
             asyncore.loop()
             sleep(1)
         except socket.error:

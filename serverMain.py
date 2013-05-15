@@ -14,7 +14,7 @@ import string
 
 def create_random_strings():
     stringTasks = []
-    for _ in xrange(1000000):
+    for _ in xrange(500000):
         stringTasks.append(StringTask(id_generator(random.randint(5, 40))))
     return stringTasks
 
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     mainLogger = getLoggerForStdOut('Main')
     tasks = create_random_strings()
     mainLogger.debug("Create " + str(len(tasks)) + " number of strings")
-    server = Server(("", 9874), 100, tasks, 10)
+    server = Server(("", 9874), 100, tasks, 10000)
     mainLogger.debug("Created server to listen on %s:%s" % 
                      server.address)
     mainLogger.debug("Start asyncore loop")

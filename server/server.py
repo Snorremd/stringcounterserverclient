@@ -11,6 +11,7 @@ import asyncore
 import string
 import random
 import thread
+import threading
 from time import sleep
 from pickle import PickleError
 from datetime import datetime
@@ -44,6 +45,7 @@ class Server(asyncore.dispatcher):
         self.programId = "StringCounter"
         self.timeoutSeconds = timeoutSeconds
         self.batchSize = batchSize
+        self.resultsSize = len(tasks)
         self.clientSockets = {}
 
         self.taskOrganizer = TaskOrganizer(timeoutSeconds, tasks)
@@ -55,9 +57,13 @@ class Server(asyncore.dispatcher):
         self.logger.debug("Created server socket at " + str(self.address))
         self.listen(100)
 
-        thread.start_new_thread(self.send_client_scores, ())
 
         return
+
+    def initiate_send(self):
+        self.sending.acquire()
+        asynchat.async_chat.initiate_send(self)
+        self.sending.release()
 
     def handle_accept(self):
         '''Handle incoming calls from client
@@ -82,15 +88,15 @@ class Server(asyncore.dispatcher):
         '''
         del self.clientSockets[clientId]
 
-    def send_client_scores(self):
-        '''Send score results to each client
-        '''
+    '''def send_client_scores(self):
+        ## Send score results to each client
+        
         while True:
             sleep(10)
             self.logger.debug("Send scores to clients")
             userScores = self.scoreBoard.get_user_ranks()
             for _, clientSocket in self.clientSockets.items():
-                clientSocket.send_client_scores(userScores)
+                clientSocket.send_client_scores(userScores)'''
 
 
 class ClientHandler(asynchat.async_chat):
@@ -187,6 +193,7 @@ class ClientHandler(asynchat.async_chat):
                                         "Currently no tasks to execute")
             self.send_message(errorMessage)
         else:
+            self.currentTasks = tasks.keys()
             taskMessage = TaskMessage("Task:", tasks)
             self.send_message(taskMessage)
 
@@ -195,12 +202,18 @@ class ClientHandler(asynchat.async_chat):
         if self.check_tasks_authenticity(results.keys()):
             self.taskOrganizer.finish_tasks(results)
         else:
+            self.logger.debug("Client tasks not authenticated")
             message = TaskAuthenticationError("Task authentication error",
                                               results.keys())
             self.send_message(message)
 
         self.currentTasks = {}
         self.scoreBoard.increase_user_score(self.username, len(results))
+        self.send_client_scores()
+        self.logger.debug("Tasks done: " + str(len(self.taskOrganizer.results)))
+        if self.taskOrganizer.tasks_finished(self.serverSocket.resultsSize):
+            self.logger.debug("ALL TASKS DONE. NUMBER OF RESULTS: " + \
+                               str(self.taskOrganizer.results))
 
     def check_tasks_authenticity(self, taskIds):
         '''Check if results from client match current task ids
@@ -216,32 +229,15 @@ class ClientHandler(asynchat.async_chat):
         else:
             return False
 
-    def send_client_scores(self, userScores):
+    def send_client_scores(self):
         '''Send clients score and top 100 scores to client
         '''
         self.logger.debug("Send scores to client")
         start = time.time()
         userScore = self.scoreBoard.get_user_score(self.username)
-        scores = userScores.items()[:100]
+        scores = self.scoreBoard.get_user_ranks().items()[:100]
         scoreMessage = ScoreMessage("Scores", userScore, scores)
         self.send_message(scoreMessage)
         stop = time.time()
 
         self.logger.debug("Time to send score to single client: " + str(stop - start))
-        self.output_scores(scoreMessage)
-
-    def output_scores(self, scoreMessage):
-        '''Outputs scores to the logger defined in self
-        '''
-        scoreOutput = "\n#####################################\n" + \
-        "Your score: " + str(scoreMessage.userScore) + "\n" + \
-        "-----------\n" + \
-        self.get_scoreboard_string(scoreMessage.topScores)
-        self.logger.debug(scoreOutput)
-
-    def get_scoreboard_string(self, topScores):
-        noOfScores = len(topScores)
-        scoreBoardString = "Top " + str(noOfScores) + " users:\n"
-        for user, score in topScores:
-            scoreBoardString += "{0:15} : {1}\n".format(user, score)
-        return scoreBoardString

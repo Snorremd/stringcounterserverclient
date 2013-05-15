@@ -73,6 +73,8 @@ class Client(asynchat.async_chat):
         else:
             if isinstance(message, TaskMessage):
                 self.process_tasks(message.tasks)
+            elif isinstance(message, TaskAuthenticationError):
+                self.logger.debug("Tasks were not authenticated")
             elif isinstance(message, NoTasksMessage):
                 self.logger.debug("Server returned NoTasksError " + \
                                   "with reason:\n" + message.noTasksInfo)
@@ -130,7 +132,6 @@ class Client(asynchat.async_chat):
         else:
             self.send_task_results(results)
             self.noOfCompletedTasks += len(results)
-            self.send_task_request()
 
     def send_task_results(self, results):
         '''Sends task results to the server
